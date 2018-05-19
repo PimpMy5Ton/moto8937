@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+
+# Builds a package from the Arch User Repository
+function aur() {
+	git clone https://aur.archlinux.org/$1;
+	cd $1;
+	makepkg -si $2;
+	cd -;
+}
+
+# FORMATS THE TIME
+function format_time() {
+    MINS=$(((${1}-${2})/60))
+    SECS=$(((${1}-${2})%60))
+    if [[ ${MINS} -ge 60 ]]; then
+        HOURS=$((${MINS}/60))
+        MINS=$((${MINS}%60))
+    fi
+
+    if [[ ${HOURS} -eq 1 ]]; then
+        TIME_STRING+="1 HOUR, "
+    elif [[ ${HOURS} -ge 2 ]]; then
+        TIME_STRING+="${HOURS} HOURS, "
+    fi
+
+    if [[ ${MINS} -eq 1 ]]; then
+        TIME_STRING+="1 MINUTE"
+    else
+        TIME_STRING+="${MINS} MINUTES"
+    fi
+
+    if [[ ${SECS} -eq 1 && -n ${HOURS} ]]; then
+        TIME_STRING+=", AND 1 SECOND"
+    elif [[ ${SECS} -eq 1 && -z ${HOURS} ]]; then
+        TIME_STRING+=" AND 1 SECOND"
+    elif [[ ${SECS} -ne 1 && -n ${HOURS} ]]; then
+        TIME_STRING+=", AND ${SECS} SECONDS"
+    elif [[ ${SECS} -ne 1 && -z ${HOURS} ]]; then
+        TIME_STRING+=" AND ${SECS} SECONDS"
+    fi
+
+    echo ${TIME_STRING}
+}
+
+# Repopicks a | delimited set of commits
+function repopick_stuff() {
+	export oldifs=$IFS;
+	export IFS="|";
+	for f in ${REPOPICK_LIST}; do
+	    echo $f;
+	    repopick $f;
+	    [[ $? -ne 0 ]] && exit 1;
+	done
+	export IFS=$oldifs;
+}
+
+# Creates a virtualenv and activates it
+function venv() {
+    PYV=$(python -c "import sys;t='{v[0]}'.format(v=list(sys.version_info[:1]));sys.stdout.write(t)");
+    if [[ "${PYV}" == "3" ]]; then
+        if [[ "$(command -v 'virtualenv2')" ]]; then
+            virtualenv2 /tmp/venv;
+            source /tmp/venv/bin/activate;
+        else
+            echo "Please install 'virtualenv2', or make 'python' point to python2";
+        fi
+    fi
+}
+
+# Deactivates a virtualenv and deletes the folder
+function rmvenv() {
+    if [[ -d "/tmp/venv/" ]]; then
+        deactivate;
+        rm -rf /tmp/venv/bin/activate;
+    fi
+}
+
+# Uploads a given file to transfer.sh
+function transfer() {
+    file="$1";
+    zipname=$(echo "${file}" | awk -F '/' '{print $NF}')
+    destination="$2";
+    url=$(curl -# -T "${file}" https://transfer.sh/${destination});
+    printf '\n';
+    echo -e "Download $zipname at $url";
+}
+
+# Creates a virtualenv if required, runs the given command, and then deactivates it
+function run_virtualenv() {
+	venv
+
+    "$@";
+
+    rmvenv;
+}
+
+# Function to repo sync with a lot of flags because I'm lazy to type them over and and over again
+function syncc() {
+    time run_virtualenv repo sync --force-broken --force-sync --no-clone-bundle --current-branch --no-tags "$@";
+}
+
+function gitalias() {
+	git config --global alias.s 'status';
+	git config --global alias.p 'push';
+	git config --global alias.pl 'pull';
+	git config --global alias.f 'fetch';
+	git config --global alias.r 'remote';
+	git config --global alias.rv 'remote --verbose';
+	git config --global alias.rev 'revert';
+	git config --global alias.re 'reset';
+	git config --global alias.cp 'cherry-pick';
+	git config --global alias.cpc 'cherry-pick --continue';
+	git config --global alias.cpa 'cherry-pick --abort';
+	git config --global alias.rh 'reset --hard';
+	git config --global alias.rs 'reset --soft';
+	git config --global alias.rb 'rebase';
+	git config --global alias.rbi 'rebase --interactive';
+	git config --global alias.rbc 'rebase --continue';
+	git config --global alias.rba 'rebase --abort';
+	git config --global alias.rbs 'rebase --skip';
+	git config --global alias.d 'diff';
+	git config --global alias.b 'bisect';
+	git config --global alias.c 'commit';
+	git config --global alias.cs 'commit --signoff';
+	git config --global alias.ca 'commit --amend';
+	git config --global alias.gerrit 'push gerrit HEAD:refs/for/oreo-mr1';
+}
